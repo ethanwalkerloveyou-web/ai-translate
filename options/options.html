@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI 划词翻译 · 设置</title>
+<link rel="stylesheet" href="options.css" />
+</head>
+<body>
+  <div class="bg-decor" aria-hidden="true"></div>
+
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-icon">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M4 5h9M8 3v2m3.5 0c-.6 3.2-2.4 6-5.5 8" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M6 9c1 1.6 2.6 2.9 4.5 3.7" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
+            <path d="M14 21l3.5-9 3.5 9M15.1 18h4.8" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <div>
+          <h1>AI 划词翻译</h1>
+          <p>选中网页文字，交给你自己的大模型翻译</p>
+        </div>
+      </div>
+    </header>
+
+    <div class="layout">
+      <nav class="tabs" role="tablist" aria-label="设置分类">
+        <button class="tab active" data-tab="model" role="tab" aria-selected="true">
+          <span class="tab-ico">🔑</span> 模型与 Key
+        </button>
+        <button class="tab" data-tab="translate" role="tab" aria-selected="false">
+          <span class="tab-ico">🌐</span> 翻译与交互
+        </button>
+        <button class="tab" data-tab="about" role="tab" aria-selected="false">
+          <span class="tab-ico">✨</span> 关于
+        </button>
+      </nav>
+
+      <main class="content">
+        <!-- 模型与 Key -->
+        <section class="panel active" id="tab-model">
+          <div class="card">
+            <div class="card-head">
+              <h2>接口类型</h2>
+              <p>选择你的大模型服务使用哪种 API 协议</p>
+            </div>
+            <div class="segmented" id="providerSegmented">
+              <button type="button" class="seg-btn active" data-provider="openai">
+                <strong>OpenAI 兼容</strong>
+                <small>OpenAI / DeepSeek / Qwen / Kimi / 中转服务…</small>
+              </button>
+              <button type="button" class="seg-btn" data-provider="anthropic">
+                <strong>Anthropic 原生</strong>
+                <small>Claude 官方 API</small>
+              </button>
+            </div>
+          </div>
+
+          <div class="card provider-panel active" id="panel-openai">
+            <div class="card-head">
+              <h2>OpenAI 兼容配置</h2>
+              <p>适用于任何兼容 <code>/chat/completions</code> 接口的服务</p>
+            </div>
+            <div class="field">
+              <label for="openaiBaseUrl">Base URL</label>
+              <input id="openaiBaseUrl" type="text" placeholder="https://api.openai.com/v1" autocomplete="off" spellcheck="false" />
+            </div>
+            <div class="field">
+              <label for="openaiApiKey">API Key</label>
+              <div class="input-with-btn">
+                <input id="openaiApiKey" type="password" placeholder="sk-..." autocomplete="off" spellcheck="false" />
+                <button type="button" class="ghost-btn toggle-visibility" data-target="openaiApiKey">显示</button>
+              </div>
+            </div>
+            <div class="field">
+              <label for="openaiModel">模型名称</label>
+              <input id="openaiModel" type="text" list="openaiModelList" placeholder="例如 gpt-4o-mini / deepseek-chat / qwen-plus" autocomplete="off" spellcheck="false" />
+              <datalist id="openaiModelList">
+                <option value="gpt-4o-mini"></option>
+                <option value="gpt-4o"></option>
+                <option value="gpt-4.1"></option>
+                <option value="o3-mini"></option>
+                <option value="deepseek-chat"></option>
+                <option value="deepseek-reasoner"></option>
+                <option value="qwen-plus"></option>
+                <option value="qwen-turbo"></option>
+                <option value="moonshot-v1-8k"></option>
+              </datalist>
+            </div>
+            <div class="field thinking-sub" id="openaiThinkingField">
+              <label for="openaiThinkingExtra">思考附加参数 <span class="hint">(JSON，随请求体合并)</span></label>
+              <textarea id="openaiThinkingExtra" rows="3" spellcheck="false" placeholder='{"reasoning_effort":"medium"}'></textarea>
+              <p class="field-tip">不同服务商字段不同，例如 DeepSeek 用 <code>{"enable_thinking":true}</code>，OpenAI o 系列用 <code>{"reasoning_effort":"medium"}</code>。</p>
+            </div>
+          </div>
+
+          <div class="card provider-panel" id="panel-anthropic">
+            <div class="card-head">
+              <h2>Anthropic 原生配置</h2>
+              <p>直接对接 Claude 官方 Messages API</p>
+            </div>
+            <div class="field">
+              <label for="anthropicBaseUrl">Base URL</label>
+              <input id="anthropicBaseUrl" type="text" placeholder="https://api.anthropic.com" autocomplete="off" spellcheck="false" />
+            </div>
+            <div class="field">
+              <label for="anthropicApiKey">API Key</label>
+              <div class="input-with-btn">
+                <input id="anthropicApiKey" type="password" placeholder="sk-ant-..." autocomplete="off" spellcheck="false" />
+                <button type="button" class="ghost-btn toggle-visibility" data-target="anthropicApiKey">显示</button>
+              </div>
+            </div>
+            <div class="field">
+              <label for="anthropicModel">模型名称</label>
+              <input id="anthropicModel" type="text" placeholder="填写你账号可用的 Claude 模型 ID" autocomplete="off" spellcheck="false" />
+            </div>
+            <div class="field thinking-sub" id="anthropicThinkingField">
+              <label for="anthropicThinkingBudget">思考预算 Token 数</label>
+              <input id="anthropicThinkingBudget" type="number" min="256" step="256" placeholder="2048" />
+              <p class="field-tip">开启思考后会自动确保「最大输出 Token」大于该预算值。</p>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head-row">
+              <div>
+                <h2>思考模式</h2>
+                <p>开启后模型会先进行推理，再给出翻译结果</p>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="enableThinking" />
+                <span class="switch-track"><span class="switch-thumb"></span></span>
+              </label>
+            </div>
+            <div class="field" style="margin-top:14px;">
+              <label for="maxTokens">最大输出 Token 数</label>
+              <input id="maxTokens" type="number" min="64" step="64" placeholder="1024" />
+            </div>
+          </div>
+
+          <div class="test-row">
+            <button type="button" class="primary-btn" id="testBtn">
+              <span class="btn-ico">⚡</span> 测试连接
+            </button>
+            <span class="test-result" id="testResult"></span>
+          </div>
+        </section>
+
+        <!-- 翻译与交互 -->
+        <section class="panel" id="tab-translate">
+          <div class="card">
+            <div class="card-head">
+              <h2>划词触发方式</h2>
+              <p>选中文字后，希望立即翻译，还是先出现一个小图标</p>
+            </div>
+            <div class="segmented" id="triggerSegmented">
+              <button type="button" class="seg-btn active" data-trigger="click">
+                <strong>点击图标翻译</strong>
+                <small>选中后出现小图标，点击才翻译，不易误触</small>
+              </button>
+              <button type="button" class="seg-btn" data-trigger="immediate">
+                <strong>划词后立即翻译</strong>
+                <small>选中即翻译，响应更快</small>
+              </button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h2>语言</h2>
+              <p>目标语言优先，若原文已是目标语言则译为源语言</p>
+            </div>
+            <div class="grid-2">
+              <div class="field">
+                <label for="targetLang">目标语言</label>
+                <input id="targetLang" type="text" placeholder="中文" />
+              </div>
+              <div class="field">
+                <label for="sourceLang">源语言（回退用）</label>
+                <input id="sourceLang" type="text" placeholder="英文" />
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head-row">
+              <div>
+                <h2>翻译 Prompt</h2>
+                <p>作为 system 提示词发送给模型，可用变量 <code>{{targetLang}}</code> <code>{{sourceLang}}</code></p>
+              </div>
+              <button type="button" class="ghost-btn" id="resetPrompt">恢复默认</button>
+            </div>
+            <textarea id="promptTemplate" rows="7" spellcheck="false"></textarea>
+          </div>
+        </section>
+
+        <!-- 关于 -->
+        <section class="panel" id="tab-about">
+          <div class="card">
+            <div class="card-head">
+              <h2>关于 AI 划词翻译</h2>
+              <p>一个轻量的浏览器划词翻译插件</p>
+            </div>
+            <ul class="about-list">
+              <li>所有 API Key 与设置仅保存在浏览器本地 <code>chrome.storage.sync</code> 中，不经过任何第三方服务器中转。</li>
+              <li>翻译请求由插件后台直接发送到你填写的 Base URL，请自行确认该地址可信。</li>
+              <li>支持 OpenAI 兼容接口与 Anthropic 官方接口，可分别配置并按需开启思考模式。</li>
+            </ul>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <footer class="savebar">
+      <span class="save-status" id="saveStatus"></span>
+      <button type="button" class="primary-btn save-btn" id="saveBtn">保存设置</button>
+    </footer>
+  </div>
+
+  <script src="../common.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>
