@@ -90,10 +90,32 @@
                 <option value="moonshot-v1-8k"></option>
               </datalist>
             </div>
-            <div class="field thinking-sub" id="openaiThinkingField">
-              <label for="openaiThinkingExtra">思考附加参数 <span class="hint">(JSON，随请求体合并)</span></label>
+            <div class="field toggle-sub" id="openaiThinkingField">
+              <label for="openaiThinkingExtra">开启思考时的附加参数 <span class="hint">(JSON，随请求体合并)</span></label>
+              <div class="presets" data-target="openaiThinkingExtra">
+                <button type="button" data-val='{"reasoning_effort": "medium"}'>OpenAI o / gpt-5</button>
+                <button type="button" data-val='{"enable_thinking": true}'>阿里云百炼 Qwen</button>
+                <button type="button" data-val='{"thinking": {"type": "enabled"}}'>智谱 GLM / 豆包</button>
+                <button type="button" data-val='{"chat_template_kwargs": {"enable_thinking": true}}'>vLLM 自建</button>
+                <button type="button" data-val="">清空</button>
+              </div>
               <textarea id="openaiThinkingExtra" rows="3" spellcheck="false" placeholder='{"reasoning_effort":"medium"}'></textarea>
-              <p class="field-tip">不同服务商字段不同，例如 DeepSeek 用 <code>{"enable_thinking":true}</code>，OpenAI o 系列用 <code>{"reasoning_effort":"medium"}</code>。</p>
+            </div>
+
+            <div class="field toggle-sub" id="openaiNonThinkingField">
+              <label for="openaiNonThinkingExtra">关闭思考时的附加参数 <span class="hint">(JSON，随请求体合并)</span></label>
+              <div class="presets" data-target="openaiNonThinkingExtra">
+                <button type="button" data-val='{"enable_thinking": false}'>阿里云百炼 Qwen</button>
+                <button type="button" data-val='{"thinking": {"type": "disabled"}}'>智谱 GLM / 豆包</button>
+                <button type="button" data-val='{"chat_template_kwargs": {"enable_thinking": false}}'>vLLM 自建</button>
+                <button type="button" data-val="">清空（OpenAI 官方）</button>
+              </div>
+              <textarea id="openaiNonThinkingExtra" rows="3" spellcheck="false" placeholder="留空表示不发送任何字段"></textarea>
+              <p class="field-tip">
+                <strong>重要：</strong>Qwen3、GLM、豆包等模型在服务端<strong>默认开启思考</strong>，只是「不发送思考参数」并不会关掉它，
+                必须在这里显式发送关闭字段。OpenAI 官方接口留空即可。
+                DeepSeek 官方则是靠模型名区分：<code>deepseek-reasoner</code> 一定思考，<code>deepseek-chat</code> 不思考。
+              </p>
             </div>
           </div>
 
@@ -117,7 +139,7 @@
               <label for="anthropicModel">模型名称</label>
               <input id="anthropicModel" type="text" placeholder="填写你账号可用的 Claude 模型 ID" autocomplete="off" spellcheck="false" />
             </div>
-            <div class="field thinking-sub" id="anthropicThinkingField">
+            <div class="field toggle-sub" id="anthropicThinkingField">
               <label for="anthropicThinkingBudget">思考预算 Token 数</label>
               <input id="anthropicThinkingBudget" type="number" min="256" step="256" placeholder="2048" />
               <p class="field-tip">开启思考后会自动确保「最大输出 Token」大于该预算值。</p>

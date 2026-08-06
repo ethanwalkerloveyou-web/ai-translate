@@ -18,6 +18,8 @@
     openaiModel: document.getElementById('openaiModel'),
     openaiThinkingExtra: document.getElementById('openaiThinkingExtra'),
     openaiThinkingField: document.getElementById('openaiThinkingField'),
+    openaiNonThinkingExtra: document.getElementById('openaiNonThinkingExtra'),
+    openaiNonThinkingField: document.getElementById('openaiNonThinkingField'),
 
     anthropicBaseUrl: document.getElementById('anthropicBaseUrl'),
     anthropicApiKey: document.getElementById('anthropicApiKey'),
@@ -90,11 +92,25 @@
 
   function refreshThinkingSubFields() {
     var on = els.enableThinking.checked;
+    // 开启思考相关的字段在开时可用，关闭思考的字段则相反
     els.openaiThinkingField.classList.toggle('enabled', on);
     els.anthropicThinkingField.classList.toggle('enabled', on);
+    els.openaiNonThinkingField.classList.toggle('enabled', !on);
   }
 
   els.enableThinking.addEventListener('change', refreshThinkingSubFields);
+
+  // 附加参数的一键预设
+  document.querySelectorAll('.presets').forEach(function (group) {
+    group.addEventListener('click', function (e) {
+      var btn = e.target.closest('button');
+      if (!btn) return;
+      var target = document.getElementById(group.getAttribute('data-target'));
+      if (!target) return;
+      var val = btn.getAttribute('data-val');
+      target.value = val ? JSON.stringify(JSON.parse(val), null, 2) : '';
+    });
+  });
 
   document.querySelectorAll('.toggle-visibility').forEach(function (btn) {
     btn.addEventListener('click', function () {
@@ -118,6 +134,7 @@
     els.openaiApiKey.value = settings.openai.apiKey || '';
     els.openaiModel.value = settings.openai.model || '';
     els.openaiThinkingExtra.value = settings.openai.thinkingExtraBody || '';
+    els.openaiNonThinkingExtra.value = settings.openai.nonThinkingExtraBody || '';
 
     els.anthropicBaseUrl.value = settings.anthropic.baseUrl || '';
     els.anthropicApiKey.value = settings.anthropic.apiKey || '';
@@ -141,7 +158,8 @@
         baseUrl: els.openaiBaseUrl.value.trim(),
         apiKey: els.openaiApiKey.value.trim(),
         model: els.openaiModel.value.trim(),
-        thinkingExtraBody: els.openaiThinkingExtra.value.trim()
+        thinkingExtraBody: els.openaiThinkingExtra.value.trim(),
+        nonThinkingExtraBody: els.openaiNonThinkingExtra.value.trim()
       },
       anthropic: {
         baseUrl: els.anthropicBaseUrl.value.trim(),
@@ -159,15 +177,21 @@
   }
 
   function validateThinkingJson() {
-    if (state.provider !== 'openai' || !els.enableThinking.checked) return null;
-    var raw = els.openaiThinkingExtra.value.trim();
-    if (!raw) return null;
-    try {
-      JSON.parse(raw);
-      return null;
-    } catch (e) {
-      return '“思考附加参数”不是合法的 JSON，请检查格式';
+    if (state.provider !== 'openai') return null;
+    var fields = [
+      { el: els.openaiThinkingExtra, label: '开启思考时的附加参数' },
+      { el: els.openaiNonThinkingExtra, label: '关闭思考时的附加参数' }
+    ];
+    for (var i = 0; i < fields.length; i++) {
+      var raw = fields[i].el.value.trim();
+      if (!raw) continue;
+      try {
+        JSON.parse(raw);
+      } catch (e) {
+        return '“' + fields[i].label + '”不是合法的 JSON，请检查格式';
+      }
     }
+    return null;
   }
 
   var saveStatusTimer = null;

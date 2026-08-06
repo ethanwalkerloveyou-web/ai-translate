@@ -20,9 +20,13 @@
       baseUrl: 'https://api.openai.com/v1',
       apiKey: '',
       model: '',
-      // 启用思考时合并进请求体的额外字段（JSON 字符串），
-      // 例如 DeepSeek: {"enable_thinking": true}，OpenAI o系列: {"reasoning_effort": "medium"}
-      thinkingExtraBody: '{\n  "reasoning_effort": "medium"\n}'
+      // 开启思考时合并进请求体的额外字段（JSON 字符串），
+      // 例如百炼 Qwen3: {"enable_thinking": true}，OpenAI o系列: {"reasoning_effort": "medium"}
+      thinkingExtraBody: '{\n  "reasoning_effort": "medium"\n}',
+      // 关闭思考时合并进请求体的额外字段（JSON 字符串）。
+      // 很多模型（Qwen3、GLM、豆包等）服务端默认开启思考，必须显式关闭才会生效；
+      // 留空表示不发送任何字段（OpenAI 官方接口保持留空即可）。
+      nonThinkingExtraBody: ''
     },
 
     anthropic: {
