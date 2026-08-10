@@ -106,6 +106,10 @@
   var pendingAnchor = null;
   var pendingText = '';
   var lastResultText = '';
+  // 图标「应该」显示（选区仍然有效）；实际是否可见还取决于锚点是否在视口内
+  var iconWanted = false;
+  // 鼠标松开处的页面坐标，滚动时据此重新计算锚点
+  var pendingPoint = null;
 
   function eventInsideHost(e) {
     var path = typeof e.composedPath === 'function' ? e.composedPath() : [];
@@ -113,6 +117,7 @@
   }
 
   function hideIcon() {
+    iconWanted = false;
     iconBtn.classList.remove('show');
   }
 
@@ -126,9 +131,30 @@
     hideCard();
   }
 
+  function scrollOffset() {
+    return {
+      x: window.scrollX || window.pageXOffset || 0,
+      y: window.scrollY || window.pageYOffset || 0
+    };
+  }
+
+  /** 锚点以页面坐标保存，用时换算成视口坐标，这样滚动后依然能贴着原文。 */
+  function toViewportAnchor(pageAnchor) {
+    if (!pageAnchor) return null;
+    var s = scrollOffset();
+    return {
+      x: pageAnchor.x - s.x,
+      top: pageAnchor.top - s.y,
+      bottom: pageAnchor.bottom - s.y
+    };
+  }
+
+  function anchorInViewport(viewAnchor) {
+    return !!viewAnchor && viewAnchor.bottom > 0 && viewAnchor.top < window.innerHeight;
+  }
+
   /**
-   * 以锚点为中心摆放元素。
-   * anchor: { x, top, bottom }
+   * 以锚点为中心摆放元素。anchor 为视口坐标 { x, top, bottom }：
    *   x       —— 水平锚点（优先取鼠标松开处），元素在其左右居中
    *   top/bot —— 垂直避让区间（光标所在那一行文字），元素放在它下方，放不下则放上方
    * 注意用 offsetWidth/offsetHeight 而不是 getBoundingClientRect()，
@@ -151,6 +177,25 @@
 
     x = Math.max(margin, Math.min(x, window.innerWidth - w - margin));
     y = Math.max(margin, y);
+
+    el.style.left = Math.round(x) + 'px';
+    el.style.top = Math.round(y) + 'px';
+  }
+
+  /**
+   * 保持元素当前位置，只把它夹回视口内。
+   * 用于内容高度变化（翻译结果渲染完、展开思考过程）或窗口尺寸变化时，
+   * 避免卡片跳回锚点位置。
+   */
+  function clampIntoViewport(el) {
+    var margin = 8;
+    var w = el.offsetWidth;
+    var h = el.offsetHeight;
+    var x = parseFloat(el.style.left) || 0;
+    var y = parseFloat(el.style.top) || 0;
+
+    x = Math.max(margin, Math.min(x, Math.max(margin, window.innerWidth - w - margin)));
+    y = Math.max(margin, Math.min(y, Math.max(margin, window.innerHeight - h - margin)));
 
     el.style.left = Math.round(x) + 'px';
     el.style.top = Math.round(y) + 'px';
@@ -204,11 +249,18 @@
         }
       : { x: lineRect.right, top: lineRect.top, bottom: lineRect.bottom };
 
+    // 转成页面坐标保存，滚动后仍可换算出正确的视口位置
+    var s = scrollOffset();
+    anchor.x += s.x;
+    anchor.top += s.y;
+    anchor.bottom += s.y;
+
     return { text: text, anchor: anchor };
   }
 
-  function showIcon(anchor) {
-    positionElement(iconBtn, anchor);
+  function showIcon(pageAnchor) {
+    iconWanted = true;
+    positionElement(iconBtn, toViewportAnchor(pageAnchor));
     iconBtn.classList.add('show');
   }
 
@@ -253,9 +305,10 @@
     }
   }
 
-  function openCardAndTranslate(text, anchor) {
+  function openCardAndTranslate(text, pageAnchor) {
     card.classList.add('show');
-    positionElement(card, anchor);
+    // 卡片只在打开时按锚点定位一次，之后固定在屏幕上，页面滚动不再牵动它
+    positionElement(card, toViewportAnchor(pageAnchor));
     elBody.innerHTML = '';
     elBody.appendChild(buildLoading());
     elMeta.textContent = '';
@@ -274,8 +327,8 @@
         return;
       }
       renderResult(response);
-      // 重新定位，因为内容加载后卡片高度可能变化
-      positionElement(card, anchor);
+      // 内容加载后卡片高度会变，就地夹回视口即可，不要跳回锚点
+      clampIntoViewport(card);
     });
   }
 
@@ -294,7 +347,7 @@
   elThinkToggle.addEventListener('click', function (e) {
     e.stopPropagation();
     elThink.classList.toggle('open');
-    positionElement(card, pendingAnchor);
+    clampIntoViewport(card);
   });
 
   elCopy.addEventListener('click', function (e) {
@@ -324,6 +377,7 @@
       if (eventInsideHost(e)) return;
       // 记录鼠标松开的位置：按钮要贴着它出现，而不是贴着整段选区的外接矩形
       var point = { x: e.clientX, y: e.clientY };
+      var s = scrollOffset();
       setTimeout(function () {
         var info = getSelectionInfo(point);
         if (!info) {
@@ -331,6 +385,7 @@
           return;
         }
         pendingAnchor = info.anchor;
+        pendingPoint = { x: point.x + s.x, y: point.y + s.y };
         pendingText = info.text;
         Common.getSettings().then(function (settings) {
           // 用户可能在等待期间又清空了选区
@@ -356,6 +411,49 @@
     true
   );
 
-  window.addEventListener('scroll', hideAll, true);
-  window.addEventListener('resize', hideAll);
+  var syncQueued = false;
+
+  /**
+   * 页面滚动/窗口尺寸变化时的跟随逻辑：
+   * - 小图标锚在原文上，跟着原文一起移动；原文滚出视口就先隐藏，滚回来再出现。
+   * - 翻译卡片是阅读面板，保持在屏幕原处不动，只在越界时夹回视口，
+   *   这样滚动页面时可以继续看译文（关闭仍然用叉号、点击空白处或 Esc）。
+   */
+  function syncPositions() {
+    if (iconWanted && pendingPoint) {
+      // 按当前选区重新计算锚点，这样页面内部的滚动容器也能正确跟随
+      var s = scrollOffset();
+      var info = getSelectionInfo({ x: pendingPoint.x - s.x, y: pendingPoint.y - s.y });
+      if (!info || info.text !== pendingText) {
+        hideIcon();
+      } else {
+        pendingAnchor = info.anchor;
+        var viewAnchor = toViewportAnchor(pendingAnchor);
+        if (anchorInViewport(viewAnchor)) {
+          positionElement(iconBtn, viewAnchor);
+          iconBtn.classList.add('show');
+        } else {
+          // 原文滚出视口就先藏起来，滚回来会重新出现
+          iconBtn.classList.remove('show');
+        }
+      }
+    }
+    if (card.classList.contains('show')) {
+      clampIntoViewport(card);
+    }
+  }
+
+  function queueSync(e) {
+    // 卡片内部（Shadow DOM）的滚动不该影响外部定位
+    if (e && eventInsideHost(e)) return;
+    if (syncQueued) return;
+    syncQueued = true;
+    requestAnimationFrame(function () {
+      syncQueued = false;
+      syncPositions();
+    });
+  }
+
+  window.addEventListener('scroll', queueSync, true);
+  window.addEventListener('resize', queueSync);
 })();
