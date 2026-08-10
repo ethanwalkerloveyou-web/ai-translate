@@ -74,22 +74,21 @@ async function extractErrorMessage(response) {
   return 'HTTP ' + response.status + '：' + (message || '请求失败');
 }
 
-async function translateOpenAI(text, systemPrompt, settings) {
-  var cfg = settings.openai;
+async function translateOpenAI(text, systemPrompt, cfg) {
   if (!cfg.apiKey) throw new Error('请先在设置页面填写 OpenAI 兼容接口的 API Key');
   if (!cfg.model) throw new Error('请先在设置页面填写模型名称');
   if (!cfg.baseUrl) throw new Error('请先在设置页面填写 Base URL');
 
   var body = {
     model: cfg.model,
-    max_tokens: settings.maxTokens,
+    max_tokens: cfg.maxTokens,
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: text }
     ]
   };
 
-  if (settings.enableThinking) {
+  if (cfg.enableThinking) {
     body = mergeExtraBody(body, cfg.thinkingExtraBody, '开启思考时的附加参数');
   } else {
     // 许多模型服务端默认开启思考，必须显式发送关闭字段才会真正不思考
@@ -135,13 +134,12 @@ async function translateOpenAI(text, systemPrompt, settings) {
   };
 }
 
-async function translateAnthropic(text, systemPrompt, settings) {
-  var cfg = settings.anthropic;
+async function translateAnthropic(text, systemPrompt, cfg) {
   if (!cfg.apiKey) throw new Error('请先在设置页面填写 Anthropic API Key');
   if (!cfg.model) throw new Error('请先在设置页面填写模型名称');
   if (!cfg.baseUrl) throw new Error('请先在设置页面填写 Base URL');
 
-  var maxTokens = settings.maxTokens || 1024;
+  var maxTokens = cfg.maxTokens || 1024;
   var body = {
     model: cfg.model,
     max_tokens: maxTokens,
@@ -149,7 +147,7 @@ async function translateAnthropic(text, systemPrompt, settings) {
     messages: [{ role: 'user', content: text }]
   };
 
-  if (settings.enableThinking) {
+  if (cfg.enableThinking) {
     var budget = cfg.thinkingBudgetTokens || 2048;
     if (maxTokens <= budget) {
       body.max_tokens = budget + 512;
@@ -212,27 +210,59 @@ async function translateAnthropic(text, systemPrompt, settings) {
   };
 }
 
-async function handleTranslate(text) {
+/** profileId 为空时用当前选中的配置，传了则临时用指定的那一条 */
+async function handleTranslate(text, profileId) {
   var settings = await Common.getSettings();
+  var profile = Common.getProfile(settings, profileId);
   var vars = { targetLang: settings.targetLang, sourceLang: settings.sourceLang };
   var systemPrompt = Common.renderPrompt(settings.promptTemplate, vars);
 
-  if (settings.provider === 'anthropic') {
-    return translateAnthropic(text, systemPrompt, settings);
-  }
-  return translateOpenAI(text, systemPrompt, settings);
+  var result =
+    profile.provider === 'anthropic'
+      ? await translateAnthropic(text, systemPrompt, profile)
+      : await translateOpenAI(text, systemPrompt, profile);
+
+  result.profileId = profile.id;
+  result.profileName = profile.name;
+  return result;
+}
+
+/** 供内容脚本填充「模型切换」下拉框，只返回展示所需字段，不下发 API Key */
+async function handleListProfiles() {
+  var settings = await Common.getSettings();
+  return {
+    ok: true,
+    activeProfileId: settings.activeProfileId,
+    profiles: settings.profiles.map(function (profile) {
+      return { id: profile.id, name: profile.name, model: profile.model, provider: profile.provider };
+    })
+  };
 }
 
 chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
   if (!message) return false;
 
-  if (message.type === 'AI_TRANSLATE_REQUEST') {
-    handleTranslate(message.text)
-      .then(sendResponse)
-      .catch(function (err) {
-        sendResponse({ ok: false, error: (err && err.message) || String(err) });
-      });
+  function respond(promise) {
+    promise.then(sendResponse).catch(function (err) {
+      sendResponse({ ok: false, error: (err && err.message) || String(err) });
+    });
     return true; // 异步响应
+  }
+
+  if (message.type === 'AI_TRANSLATE_REQUEST') {
+    return respond(handleTranslate(message.text, message.profileId));
+  }
+
+  if (message.type === 'AI_TRANSLATE_LIST_PROFILES') {
+    return respond(handleListProfiles());
+  }
+
+  if (message.type === 'AI_TRANSLATE_SET_ACTIVE_PROFILE') {
+    return respond(
+      Common.saveSettings({ activeProfileId: message.profileId }).then(function () {
+        return { ok: true };
+      })
+    );
   }
 
   return false;

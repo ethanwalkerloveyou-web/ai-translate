@@ -320,6 +320,137 @@ textarea:focus {
   color: var(--accent-1);
 }
 
+.ghost-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+
+.danger-btn:hover:not(:disabled) {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.head-actions {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+
+/* 模型配置列表 */
+.profile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.profile-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  border-radius: 12px;
+  padding: 11px 14px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.profile-item:hover {
+  border-color: var(--accent-1);
+}
+
+.profile-item.active {
+  border-color: var(--accent-1);
+  background: var(--accent-soft);
+}
+
+.profile-radio {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  flex: none;
+  position: relative;
+  transition: border-color 0.15s ease;
+}
+
+.profile-item.active .profile-radio {
+  border-color: var(--accent-1);
+}
+
+.profile-item.active .profile-radio::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+}
+
+.profile-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.profile-main strong {
+  font-size: 13.5px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-main small {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-badge,
+.profile-warn {
+  flex: none;
+  font-size: 11px;
+  border-radius: 999px;
+  padding: 3px 9px;
+  white-space: nowrap;
+}
+
+.profile-badge {
+  background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+  color: #fff;
+}
+
+.profile-warn {
+  border: 1px solid var(--danger);
+  color: var(--danger);
+}
+
+.checkline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.checkline input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-1);
+  cursor: pointer;
+  margin: 0;
+}
+
 .segmented {
   display: grid;
   grid-template-columns: 1fr 1fr;
