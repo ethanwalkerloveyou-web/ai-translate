@@ -103,7 +103,7 @@
   var elMeta = card.querySelector('.ai-tr-meta');
   var elCopy = card.querySelector('.ai-tr-copy');
 
-  var pendingRect = null;
+  var pendingAnchor = null;
   var pendingText = '';
   var lastResultText = '';
 
@@ -126,40 +126,89 @@
     hideCard();
   }
 
-  function positionElement(el, rect) {
-    el.style.left = '0px';
-    el.style.top = '0px';
-    var elRect = el.getBoundingClientRect();
+  /**
+   * 以锚点为中心摆放元素。
+   * anchor: { x, top, bottom }
+   *   x       —— 水平锚点（优先取鼠标松开处），元素在其左右居中
+   *   top/bot —— 垂直避让区间（光标所在那一行文字），元素放在它下方，放不下则放上方
+   * 注意用 offsetWidth/offsetHeight 而不是 getBoundingClientRect()，
+   * 因为隐藏态的 CSS transform（scale/translate）会让后者量出错误尺寸。
+   */
+  function positionElement(el, anchor) {
+    if (!anchor) return;
+    var w = el.offsetWidth;
+    var h = el.offsetHeight;
     var margin = 8;
-    var x = Math.min(rect.right, window.innerWidth - margin);
-    var y = rect.bottom + margin;
+    var gap = 8;
 
-    if (x + elRect.width > window.innerWidth - margin) {
-      x = Math.max(margin, window.innerWidth - elRect.width - margin);
+    var x = anchor.x - w / 2;
+    var y = anchor.bottom + gap;
+
+    if (y + h > window.innerHeight - margin) {
+      var above = anchor.top - gap - h;
+      y = above >= margin ? above : Math.max(margin, window.innerHeight - h - margin);
     }
-    if (y + elRect.height > window.innerHeight - margin) {
-      y = rect.top - elRect.height - margin;
-      if (y < margin) y = Math.min(margin, window.innerHeight - elRect.height - margin);
-    }
-    if (x < margin) x = margin;
+
+    x = Math.max(margin, Math.min(x, window.innerWidth - w - margin));
+    y = Math.max(margin, y);
 
     el.style.left = Math.round(x) + 'px';
     el.style.top = Math.round(y) + 'px';
   }
 
-  function getSelectionInfo() {
+  /** 在选区的各行矩形中，挑出离鼠标最近的一行；没有鼠标位置时取末行。 */
+  function pickLineRect(range, point) {
+    var rects = [];
+    var list = range.getClientRects ? range.getClientRects() : null;
+    for (var i = 0; list && i < list.length; i++) {
+      if (list[i].width > 0 || list[i].height > 0) rects.push(list[i]);
+    }
+    if (!rects.length) {
+      var bounding = range.getBoundingClientRect();
+      return bounding && (bounding.width > 0 || bounding.height > 0) ? bounding : null;
+    }
+    if (!point) return rects[rects.length - 1];
+
+    var best = rects[0];
+    var bestScore = Infinity;
+    for (var j = 0; j < rects.length; j++) {
+      var r = rects[j];
+      var dy = point.y < r.top ? r.top - point.y : point.y > r.bottom ? point.y - r.bottom : 0;
+      var dx = point.x < r.left ? r.left - point.x : point.x > r.right ? point.x - r.right : 0;
+      // 先比垂直距离（行的归属），同一行内再比水平距离
+      var score = dy * 1000 + dx;
+      if (score < bestScore) {
+        bestScore = score;
+        best = r;
+      }
+    }
+    return best;
+  }
+
+  /** point 为鼠标松开的视口坐标 {x, y}，可为空（如键盘选词）。 */
+  function getSelectionInfo(point) {
     var sel = window.getSelection();
     if (!sel || sel.rangeCount === 0) return null;
     var text = sel.toString().trim();
     if (!text) return null;
     var range = sel.getRangeAt(0);
-    var rect = range.getBoundingClientRect();
-    if (!rect || (rect.width === 0 && rect.height === 0)) return null;
-    return { text: text, rect: rect };
+    var lineRect = pickLineRect(range, point);
+    if (!lineRect) return null;
+
+    // 水平方向贴着鼠标；垂直方向同时避开光标所在行和光标本身
+    var anchor = point
+      ? {
+          x: point.x,
+          top: Math.min(lineRect.top, point.y),
+          bottom: Math.max(lineRect.bottom, point.y)
+        }
+      : { x: lineRect.right, top: lineRect.top, bottom: lineRect.bottom };
+
+    return { text: text, anchor: anchor };
   }
 
-  function showIcon(rect) {
-    positionElement(iconBtn, rect);
+  function showIcon(anchor) {
+    positionElement(iconBtn, anchor);
     iconBtn.classList.add('show');
   }
 
@@ -204,9 +253,9 @@
     }
   }
 
-  function openCardAndTranslate(text, rect) {
+  function openCardAndTranslate(text, anchor) {
     card.classList.add('show');
-    positionElement(card, rect);
+    positionElement(card, anchor);
     elBody.innerHTML = '';
     elBody.appendChild(buildLoading());
     elMeta.textContent = '';
@@ -226,7 +275,7 @@
       }
       renderResult(response);
       // 重新定位，因为内容加载后卡片高度可能变化
-      positionElement(card, rect);
+      positionElement(card, anchor);
     });
   }
 
@@ -234,7 +283,7 @@
     e.preventDefault();
     e.stopPropagation();
     hideIcon();
-    openCardAndTranslate(pendingText, pendingRect);
+    openCardAndTranslate(pendingText, pendingAnchor);
   });
 
   elClose.addEventListener('click', function (e) {
@@ -245,7 +294,7 @@
   elThinkToggle.addEventListener('click', function (e) {
     e.stopPropagation();
     elThink.classList.toggle('open');
-    positionElement(card, pendingRect);
+    positionElement(card, pendingAnchor);
   });
 
   elCopy.addEventListener('click', function (e) {
@@ -273,23 +322,25 @@
     'mouseup',
     function (e) {
       if (eventInsideHost(e)) return;
+      // 记录鼠标松开的位置：按钮要贴着它出现，而不是贴着整段选区的外接矩形
+      var point = { x: e.clientX, y: e.clientY };
       setTimeout(function () {
-        var info = getSelectionInfo();
+        var info = getSelectionInfo(point);
         if (!info) {
           hideIcon();
           return;
         }
-        pendingRect = info.rect;
+        pendingAnchor = info.anchor;
         pendingText = info.text;
         Common.getSettings().then(function (settings) {
           // 用户可能在等待期间又清空了选区
-          var current = getSelectionInfo();
+          var current = getSelectionInfo(point);
           if (!current || current.text !== pendingText) return;
           if (settings.triggerMode === 'immediate') {
             hideIcon();
-            openCardAndTranslate(pendingText, pendingRect);
+            openCardAndTranslate(pendingText, pendingAnchor);
           } else {
-            showIcon(pendingRect);
+            showIcon(pendingAnchor);
           }
         });
       }, 0);
