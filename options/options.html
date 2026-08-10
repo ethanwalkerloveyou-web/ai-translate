@@ -34,6 +34,9 @@
         <button class="tab" data-tab="translate" role="tab" aria-selected="false">
           <span class="tab-ico">🌐</span> 翻译与交互
         </button>
+        <button class="tab" data-tab="backup" role="tab" aria-selected="false">
+          <span class="tab-ico">💾</span> 导入导出
+        </button>
         <button class="tab" data-tab="about" role="tab" aria-selected="false">
           <span class="tab-ico">✨</span> 关于
         </button>
@@ -43,19 +46,44 @@
         <!-- 模型与 Key -->
         <section class="panel active" id="tab-model">
           <div class="card">
-            <div class="card-head">
-              <h2>接口类型</h2>
-              <p>选择你的大模型服务使用哪种 API 协议</p>
+            <div class="card-head-row">
+              <div>
+                <h2>我的模型</h2>
+                <p>可以保存多套配置，点击任意一条即可切换使用</p>
+              </div>
+              <div class="head-actions">
+                <button type="button" class="ghost-btn" id="duplicateProfileBtn">复制当前</button>
+                <button type="button" class="ghost-btn" id="addProfileBtn">＋ 新增</button>
+              </div>
             </div>
-            <div class="segmented" id="providerSegmented">
-              <button type="button" class="seg-btn active" data-provider="openai">
-                <strong>OpenAI 兼容</strong>
-                <small>OpenAI / DeepSeek / Qwen / Kimi / 中转服务…</small>
-              </button>
-              <button type="button" class="seg-btn" data-provider="anthropic">
-                <strong>Anthropic 原生</strong>
-                <small>Claude 官方 API</small>
-              </button>
+            <div class="profile-list" id="profileList"></div>
+            <p class="field-tip">翻译弹窗底部也有同样的下拉框，可以随时换一个模型重新翻译。</p>
+          </div>
+
+          <div class="card">
+            <div class="card-head-row">
+              <div>
+                <h2>编辑配置</h2>
+                <p>以下内容属于上面选中的那一条</p>
+              </div>
+              <button type="button" class="ghost-btn danger-btn" id="deleteProfileBtn">删除这条</button>
+            </div>
+            <div class="field" style="margin-top:16px;">
+              <label for="profileName">配置名称</label>
+              <input id="profileName" type="text" placeholder="例如：GPT-4o mini / 公司中转 / Claude 备用" autocomplete="off" />
+            </div>
+            <div class="field">
+              <label>接口类型 <span class="hint">(你的服务使用哪种 API 协议)</span></label>
+              <div class="segmented" id="providerSegmented">
+                <button type="button" class="seg-btn active" data-provider="openai">
+                  <strong>OpenAI 兼容</strong>
+                  <small>OpenAI / DeepSeek / Qwen / Kimi / 中转服务…</small>
+                </button>
+                <button type="button" class="seg-btn" data-provider="anthropic">
+                  <strong>Anthropic 原生</strong>
+                  <small>Claude 官方 API</small>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -150,7 +178,7 @@
             <div class="card-head-row">
               <div>
                 <h2>思考模式</h2>
-                <p>开启后模型会先进行推理，再给出翻译结果</p>
+                <p>开启后模型会先进行推理，再给出翻译结果（按配置分别保存）</p>
               </div>
               <label class="switch">
                 <input type="checkbox" id="enableThinking" />
@@ -219,6 +247,48 @@
           </div>
         </section>
 
+        <!-- 导入导出 -->
+        <section class="panel" id="tab-backup">
+          <div class="card">
+            <div class="card-head">
+              <h2>导出配置</h2>
+              <p>把全部模型配置和翻译设置存成一个 JSON 文件，换电脑或重装插件后直接导入，不用重新填一遍</p>
+            </div>
+            <label class="checkline">
+              <input type="checkbox" id="exportWithKeys" checked />
+              <span>包含 API Key</span>
+            </label>
+            <p class="field-tip">
+              <strong>注意：</strong>导出文件里的 API Key 是<strong>明文</strong>保存的，请妥善保管。
+              如果只是想把配置分享给别人，请取消勾选，导出的文件就不含 Key。
+            </p>
+            <div class="test-row" style="margin-top:16px;">
+              <button type="button" class="primary-btn" id="exportBtn">
+                <span class="btn-ico">⬇</span> 导出为 JSON 文件
+              </button>
+              <span class="test-result" id="exportResult"></span>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h2>导入配置</h2>
+              <p>选择之前导出的 JSON 文件恢复设置</p>
+            </div>
+            <div class="test-row">
+              <button type="button" class="primary-btn" id="importBtn">
+                <span class="btn-ico">⬆</span> 选择文件导入
+              </button>
+              <span class="test-result" id="importResult"></span>
+            </div>
+            <input type="file" id="importFile" accept="application/json,.json" hidden />
+            <p class="field-tip">
+              导入会<strong>覆盖当前的全部设置</strong>，操作前会先弹窗让你确认。
+              兼容旧版本导出的文件，会自动升级成多配置结构。
+            </p>
+          </div>
+        </section>
+
         <!-- 关于 -->
         <section class="panel" id="tab-about">
           <div class="card">
@@ -229,7 +299,9 @@
             <ul class="about-list">
               <li>所有 API Key 与设置仅保存在浏览器本地 <code>chrome.storage.sync</code> 中，不经过任何第三方服务器中转。</li>
               <li>翻译请求由插件后台直接发送到你填写的 Base URL，请自行确认该地址可信。</li>
-              <li>支持 OpenAI 兼容接口与 Anthropic 官方接口，可分别配置并按需开启思考模式。</li>
+              <li>支持 OpenAI 兼容接口与 Anthropic 官方接口，可保存多套模型配置并随时切换。</li>
+              <li>翻译弹窗可以按住标题栏拖动，滚动页面时不会消失。</li>
+              <li>配置可在「导入导出」中备份成 JSON 文件，换设备时直接导入。</li>
             </ul>
           </div>
         </section>

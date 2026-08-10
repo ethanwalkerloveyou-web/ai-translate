@@ -33,8 +33,12 @@
     'opacity:0;pointer-events:none;transform:translateY(6px);' +
     'transition:opacity .14s ease,transform .14s ease;}' +
     '.ai-tr-card.show{opacity:1;pointer-events:auto;transform:translateY(0);}' +
+    // 页头同时是拖动把手
     '.ai-tr-head{display:flex;align-items:center;gap:8px;padding:10px 12px;' +
-    'background:linear-gradient(135deg,#6366f1,#a855f7);color:#fff;flex:none;}' +
+    'background:linear-gradient(135deg,#6366f1,#a855f7);color:#fff;flex:none;' +
+    'cursor:move;user-select:none;-webkit-user-select:none;touch-action:none;}' +
+    '.ai-tr-card.dragging{transition:none;}' +
+    '.ai-tr-card.dragging .ai-tr-head{cursor:grabbing;}' +
     '.ai-tr-head-title{font-size:12.5px;font-weight:600;flex:1;display:flex;align-items:center;gap:6px;opacity:.95;}' +
     '.ai-tr-close{width:20px;height:20px;border-radius:6px;border:none;background:rgba(255,255,255,.18);' +
     'color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;line-height:1;' +
@@ -52,9 +56,14 @@
     '.ai-tr-think-toggle{border:none;background:none;color:#6366f1;font-size:12px;cursor:pointer;padding:0;' +
     'display:none;align-items:center;gap:4px;}' +
     '.ai-tr-think-toggle:hover{text-decoration:underline;}' +
-    '.ai-tr-copy{border:none;background:none;color:#6b7280;font-size:12px;cursor:pointer;padding:0;margin-left:auto;}' +
+    '.ai-tr-copy{border:none;background:none;color:#6b7280;font-size:12px;cursor:pointer;padding:0;flex:none;}' +
     '.ai-tr-copy:hover{color:#374151;}' +
-    '.ai-tr-meta{font-size:11px;color:#9ca3af;}' +
+    // 模型切换下拉框，做成一段不起眼的说明文字的样子
+    '.ai-tr-model{margin-left:auto;max-width:150px;border:none;background:transparent;color:#9ca3af;' +
+    'font-size:11px;font-family:inherit;padding:2px 4px;border-radius:6px;cursor:pointer;outline:none;' +
+    'text-align:right;text-align-last:right;}' +
+    '.ai-tr-model:hover{background:#eef0f4;color:#4b5563;}' +
+    '.ai-tr-model:disabled{cursor:default;background:transparent;color:#9ca3af;}' +
     '.ai-tr-think{display:none;white-space:pre-wrap;font-size:12.5px;line-height:1.55;color:#6b7280;' +
     'background:#f6f7fb;border-top:1px dashed #e5e7eb;padding:10px 14px;max-height:160px;overflow-y:auto;}' +
     '.ai-tr-think.open{display:block;}';
@@ -90,22 +99,28 @@
     '<div class="ai-tr-body"></div>' +
     '<div class="ai-tr-foot">' +
     '<button type="button" class="ai-tr-think-toggle">查看思考过程 ▾</button>' +
-    '<span class="ai-tr-meta"></span>' +
+    '<select class="ai-tr-model" title="切换模型"></select>' +
     '<button type="button" class="ai-tr-copy">复制</button>' +
     '</div>' +
     '<div class="ai-tr-think"></div>';
   shadow.appendChild(card);
 
+  var elHead = card.querySelector('.ai-tr-head');
   var elClose = card.querySelector('.ai-tr-close');
   var elBody = card.querySelector('.ai-tr-body');
   var elThinkToggle = card.querySelector('.ai-tr-think-toggle');
   var elThink = card.querySelector('.ai-tr-think');
-  var elMeta = card.querySelector('.ai-tr-meta');
+  var elModel = card.querySelector('.ai-tr-model');
   var elCopy = card.querySelector('.ai-tr-copy');
 
   var pendingAnchor = null;
   var pendingText = '';
   var lastResultText = '';
+  // 卡片里正在翻译的原文与所用的模型配置，切换模型时原地重译
+  var currentText = '';
+  var currentProfileId = '';
+  // 请求序号，用来丢弃切换模型后返回的过期响应
+  var translateSeq = 0;
   // 图标「应该」显示（选区仍然有效）；实际是否可见还取决于锚点是否在视口内
   var iconWanted = false;
   // 鼠标松开处的页面坐标，滚动时据此重新计算锚点
@@ -281,7 +296,6 @@
     wrap.textContent = msg;
     elBody.appendChild(wrap);
     elThinkToggle.style.display = 'none';
-    elMeta.textContent = '';
     elCopy.style.display = 'none';
   }
 
@@ -294,8 +308,6 @@
     lastResultText = response.text;
     elCopy.style.display = 'inline';
 
-    elMeta.textContent = response.model || '';
-
     if (response.thinking) {
       elThinkToggle.style.display = 'inline-flex';
       elThink.textContent = response.thinking;
@@ -305,31 +317,71 @@
     }
   }
 
-  function openCardAndTranslate(text, pageAnchor) {
-    card.classList.add('show');
-    // 卡片只在打开时按锚点定位一次，之后固定在屏幕上，页面滚动不再牵动它
-    positionElement(card, toViewportAnchor(pageAnchor));
+  /** 把后台返回的模型配置列表填进下拉框 */
+  function renderProfileOptions(list, activeId) {
+    elModel.innerHTML = '';
+    (list || []).forEach(function (profile) {
+      var option = document.createElement('option');
+      option.value = profile.id;
+      option.textContent = profile.name;
+      // 名称和模型名不一样时，鼠标悬停能看到真正调用的模型
+      option.title = profile.model ? profile.name + '（' + profile.model + '）' : profile.name;
+      elModel.appendChild(option);
+    });
+    if (activeId) elModel.value = activeId;
+    // 只有一条配置时没得可切，禁用避免误点
+    elModel.disabled = !list || list.length < 2;
+    elModel.title = elModel.disabled ? '当前模型' : '点击切换模型';
+  }
+
+  function refreshProfiles() {
+    chrome.runtime.sendMessage({ type: 'AI_TRANSLATE_LIST_PROFILES' }, function (response) {
+      if (chrome.runtime.lastError || !response || !response.ok) return;
+      currentProfileId = response.activeProfileId;
+      renderProfileOptions(response.profiles, response.activeProfileId);
+    });
+  }
+
+  /** 用指定配置翻译 currentText，不改动卡片位置（切换模型时原地重译） */
+  function runTranslation(profileId) {
+    var requestId = ++translateSeq;
     elBody.innerHTML = '';
     elBody.appendChild(buildLoading());
-    elMeta.textContent = '';
     elThink.textContent = '';
     elThink.classList.remove('open');
     elThinkToggle.style.display = 'none';
     elCopy.style.display = 'none';
 
-    chrome.runtime.sendMessage({ type: 'AI_TRANSLATE_REQUEST', text: text }, function (response) {
+    var payload = { type: 'AI_TRANSLATE_REQUEST', text: currentText };
+    if (profileId) payload.profileId = profileId;
+
+    chrome.runtime.sendMessage(payload, function (response) {
+      // 期间又切了一次模型，丢弃过期的响应
+      if (requestId !== translateSeq) return;
+
       if (chrome.runtime.lastError) {
         renderError(chrome.runtime.lastError.message);
-        return;
-      }
-      if (!response || !response.ok) {
+      } else if (!response || !response.ok) {
         renderError((response && response.error) || '翻译失败，请稍后重试');
-        return;
+      } else {
+        if (response.profileId) {
+          currentProfileId = response.profileId;
+          elModel.value = response.profileId;
+        }
+        renderResult(response);
       }
-      renderResult(response);
       // 内容加载后卡片高度会变，就地夹回视口即可，不要跳回锚点
       clampIntoViewport(card);
     });
+  }
+
+  function openCardAndTranslate(text, pageAnchor) {
+    currentText = text;
+    card.classList.add('show');
+    // 卡片只在打开时按锚点定位一次，之后固定在屏幕上，页面滚动和重译都不再牵动它
+    positionElement(card, toViewportAnchor(pageAnchor));
+    refreshProfiles();
+    runTranslation(currentProfileId);
   }
 
   iconBtn.addEventListener('click', function (e) {
@@ -349,6 +401,55 @@
     elThink.classList.toggle('open');
     clampIntoViewport(card);
   });
+
+  // 切换模型：记住选择（下次划词沿用），并用新模型原地重译当前这段
+  elModel.addEventListener('change', function (e) {
+    e.stopPropagation();
+    var profileId = elModel.value;
+    if (!profileId || profileId === currentProfileId) return;
+    currentProfileId = profileId;
+    chrome.runtime.sendMessage({ type: 'AI_TRANSLATE_SET_ACTIVE_PROFILE', profileId: profileId }, function () {
+      void chrome.runtime.lastError;
+    });
+    if (currentText) runTranslation(profileId);
+  });
+
+  // 拖动：按住页头移动卡片，过程中直接夹在视口内，松手不会回弹
+  var drag = null;
+
+  elHead.addEventListener('pointerdown', function (e) {
+    if (e.button !== 0) return;
+    // 关闭按钮不参与拖动
+    if (e.target && e.target.closest && e.target.closest('.ai-tr-close')) return;
+    // 阻止默认行为，避免拖动时把页面上的选区清掉
+    e.preventDefault();
+    drag = {
+      pointerId: e.pointerId,
+      offsetX: e.clientX - (parseFloat(card.style.left) || 0),
+      offsetY: e.clientY - (parseFloat(card.style.top) || 0)
+    };
+    card.classList.add('dragging');
+    if (elHead.setPointerCapture) elHead.setPointerCapture(e.pointerId);
+  });
+
+  elHead.addEventListener('pointermove', function (e) {
+    if (!drag || e.pointerId !== drag.pointerId) return;
+    card.style.left = Math.round(e.clientX - drag.offsetX) + 'px';
+    card.style.top = Math.round(e.clientY - drag.offsetY) + 'px';
+    clampIntoViewport(card);
+  });
+
+  function endDrag(e) {
+    if (!drag || e.pointerId !== drag.pointerId) return;
+    if (elHead.releasePointerCapture && elHead.hasPointerCapture(e.pointerId)) {
+      elHead.releasePointerCapture(e.pointerId);
+    }
+    drag = null;
+    card.classList.remove('dragging');
+  }
+
+  elHead.addEventListener('pointerup', endDrag);
+  elHead.addEventListener('pointercancel', endDrag);
 
   elCopy.addEventListener('click', function (e) {
     e.stopPropagation();
